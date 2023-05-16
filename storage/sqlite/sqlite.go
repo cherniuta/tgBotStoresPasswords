@@ -30,10 +30,26 @@ func New(path string) (*Storage, error) {
 
 func (s *Storage) Save(ctx context.Context, service string, p *storage.Page) error {
 	//пишем sql запрос,который сохраняет запись в бд
-	q := `INSERT INTO pages(service,information,user_name) VALUES(?,?,?)`
+	q := `SELECT COUNT(*) FROM pages WHERE user_name=? AND service=?`
 
-	if _, err := s.db.ExecContext(ctx, q, service, p.URL, p.UserName); err != nil {
-		return fmt.Errorf("can't save data: %w", err)
+	var count int
+
+	if err := s.db.QueryRowContext(ctx, q, p.UserName, service).Scan(&count); err != nil {
+		return fmt.Errorf("can't check if page exists: %w", err)
+	}
+
+	if count == 0 {
+		q = `INSERT INTO pages(service,information,user_name) VALUES(?,?,?)`
+
+		if _, err := s.db.ExecContext(ctx, q, service, p.URL, p.UserName); err != nil {
+			return fmt.Errorf("can't save data: %w", err)
+		}
+	} else {
+		q = `UPDATE pages SET information=? WHERE user_name=? AND service=?`
+
+		if _, err := s.db.ExecContext(ctx, q, p.URL, p.UserName, service); err != nil {
+			return fmt.Errorf("can't update command: %w", err)
+		}
 	}
 
 	return nil
@@ -90,10 +106,10 @@ func (s *Storage) Remove(ctx context.Context, service string, page *storage.Page
 	return nil
 }
 
-func (s *Storage) CreateService(ctx context.Context, page *storage.Page) error {
+func (s *Storage) CreateService(ctx context.Context, service string, userName string) error {
 	q := `UPDATE commands SET service=? WHERE user_name=?`
 
-	if _, err := s.db.ExecContext(ctx, q, page.URL, page.UserName); err != nil {
+	if _, err := s.db.ExecContext(ctx, q, service, userName); err != nil {
 		return fmt.Errorf("can't update service: %w", err)
 	}
 
@@ -116,14 +132,25 @@ func (s *Storage) CreateCommand(ctx context.Context, command string, userName st
 			return fmt.Errorf("can't create command: %w", err)
 		}
 	} else {
-		q = `UPDATE commands SET command=? WHERE user_name=?`
+		q = `UPDATE commands SET command=?,service=? WHERE user_name=?`
 
-		if _, err := s.db.ExecContext(ctx, q, command, userName); err != nil {
+		if _, err := s.db.ExecContext(ctx, q, command, "not", userName); err != nil {
 			return fmt.Errorf("can't update command: %w", err)
 		}
 	}
 
 	return nil
+}
+func (s *Storage) IsUsersDataEmpty(ctx context.Context, userName string) (bool, error) {
+	q := `SELECT COUNT(*) FROM pages WHERE user_name=?`
+
+	var count int
+
+	if err := s.db.QueryRowContext(ctx, q, userName).Scan(&count); err != nil {
+		return true, fmt.Errorf("can't check if page exists: %w", err)
+	}
+
+	return count == 0, nil
 }
 
 func (s *Storage) GetCommand(ctx context.Context, userName string) (*storage.Page, error) {

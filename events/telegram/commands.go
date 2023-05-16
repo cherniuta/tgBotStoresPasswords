@@ -35,30 +35,90 @@ func (p *Processor) doCmd(text string, chatID int, username string) error {
 	if command, _ := p.storage.GetCommand(context.Background(), username); command.URL == "not" {
 		switch text {
 		case GetCmd:
+			ok, err := p.storage.IsUsersDataEmpty(context.Background(), username)
+			if err != nil {
+				return err
+			}
+
+			if ok == true {
+				return p.tg.SendMessage(chatID, msgNoSaved)
+			}
+
+			err = p.tg.SendMessage(chatID, msgSetService)
+			if err != nil {
+				return err
+			}
+
 			return p.SetCommand(chatID, username, text)
 		case SetCmd:
+			err := p.tg.SendMessage(chatID, msgSetService)
+			if err != nil {
+				return err
+			}
 			return p.SetCommand(chatID, username, text)
 		case DelCmd:
+			ok, err := p.storage.IsUsersDataEmpty(context.Background(), username)
+			if err != nil {
+				return err
+			}
+
+			if ok == true {
+				return p.tg.SendMessage(chatID, msgNoSaved)
+			}
+			err = p.tg.SendMessage(chatID, msgSetService)
+			if err != nil {
+				return err
+			}
 			return p.SetCommand(chatID, username, text)
 		default:
 			return p.tg.SendMessage(chatID, msgUnknownCommand)
 		}
 
 	} else {
-		switch command.URL {
-		case GetCmd:
-			return p.sendData(chatID, username)
-		case SetCmd:
-			if isAffCmd(text) {
-				return p.saveData(chatID, text, username)
-			}
-			return p.tg.SendMessage(chatID, msgUnknownCommand)
-		case DelCmd:
-			return p.deleteData(chatID, username)
-		default:
-			return p.tg.SendMessage(chatID, msgUnknownCommand)
+		if service, _ := p.storage.GetService(context.Background(), username); service.URL == "not" {
 
+			err := p.SetService(chatID, username, text)
+			if err != nil {
+				return err
+			}
+
+			switch command.URL {
+			case GetCmd:
+				return p.sendData(chatID, username)
+			case DelCmd:
+				return p.deleteData(chatID, username)
+			case SetCmd:
+				return p.tg.SendMessage(chatID, msgSetData)
+			default:
+				return p.tg.SendMessage(chatID, msgUnknownCommand)
+
+			}
+		} else {
+
+			switch command.URL {
+			case SetCmd:
+				if isAffCmd(text) {
+					return p.saveData(chatID, text, username)
+				}
+				return p.tg.SendMessage(chatID, msgWrongFormat)
+			case GetCmd:
+				err := p.SetService(chatID, username, text)
+				if err != nil {
+					return err
+				}
+				return p.sendData(chatID, username)
+			case DelCmd:
+				err := p.SetService(chatID, username, text)
+				if err != nil {
+					return err
+				}
+				return p.deleteData(chatID, username)
+			default:
+				return p.tg.SendMessage(chatID, msgUnknownCommand)
+
+			}
 		}
+
 	}
 
 }
@@ -71,9 +131,13 @@ func (p *Processor) saveData(chatID int, pageURL string, username string) (err e
 		URL:      pageURL,
 		UserName: username,
 	}
+	service, err := p.storage.GetService(context.Background(), username)
+	if err != nil {
+		return err
+	}
 
 	//пытаемся сохранить страницу
-	if err := p.storage.Save(context.Background(), page); err != nil {
+	if err := p.storage.Save(context.Background(), service.URL, page); err != nil {
 		return err
 	}
 
@@ -94,8 +158,13 @@ func (p *Processor) saveData(chatID int, pageURL string, username string) (err e
 func (p *Processor) sendData(chatID int, username string) (err error) {
 	defer func() { err = e.WrapIfErr("can't do command: can't send random", err) }()
 
+	service, err := p.storage.GetService(context.Background(), username)
+	if err != nil {
+		return err
+	}
+
 	//ищем случайную статью
-	page, err := p.storage.PickRandom(context.Background(), username)
+	page, err := p.storage.PickPage(context.Background(), service.URL, username)
 
 	if err != nil && !errors.Is(err, storage.ErrNoSavedPages) {
 		return err
@@ -103,7 +172,7 @@ func (p *Processor) sendData(chatID int, username string) (err error) {
 
 	//особый тип ошибок, когда нет сохраненых страниц
 	if errors.Is(err, storage.ErrNoSavedPages) {
-		return p.tg.SendMessage(chatID, msgNoSavedPages)
+		return p.tg.SendMessage(chatID, msgNoSavedService)
 	}
 
 	//если же мф что-то нашли, отправляем эту ссылку пользователю
@@ -117,15 +186,19 @@ func (p *Processor) sendData(chatID int, username string) (err error) {
 		return err
 	}
 
-	//если мф нашли и отправили ссылку, то нужно обязательно ее удалить
 	return nil
 }
 
 func (p *Processor) deleteData(chatID int, username string) (err error) {
 	defer func() { err = e.WrapIfErr("can't do command: can't delete data", err) }()
 
+	service, err := p.storage.GetService(context.Background(), username)
+	if err != nil {
+		return err
+	}
+
 	//ищем случайную статью
-	page, err := p.storage.PickRandom(context.Background(), username)
+	page, err := p.storage.PickPage(context.Background(), service.URL, username)
 
 	if err != nil && !errors.Is(err, storage.ErrNoSavedPages) {
 		return err
@@ -133,10 +206,11 @@ func (p *Processor) deleteData(chatID int, username string) (err error) {
 
 	//особый тип ошибок, когда нет сохраненых страниц
 	if errors.Is(err, storage.ErrNoSavedPages) {
-		return p.tg.SendMessage(chatID, msgNoSavedPages)
+
+		return p.tg.SendMessage(chatID, msgNoSavedService)
 	}
 
-	if err := p.storage.Remove(context.Background(), page); err != nil {
+	if err := p.storage.Remove(context.Background(), service.URL, page); err != nil {
 		return err
 	}
 
@@ -157,6 +231,13 @@ func (p *Processor) deleteData(chatID int, username string) (err error) {
 
 func (p *Processor) SetCommand(chatID int, username string, command string) error {
 	if err := p.storage.CreateCommand(context.Background(), command, username); err != nil {
+		return err
+	}
+
+	return nil
+}
+func (p *Processor) SetService(chatID int, username string, service string) error {
+	if err := p.storage.CreateService(context.Background(), service, username); err != nil {
 		return err
 	}
 

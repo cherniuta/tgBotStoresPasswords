@@ -27,9 +27,11 @@ type Storage interface {
 
 	GetCommand(ctx context.Context, userName string) (*Page, error)
 
-	CreateService(ctx context.Context, page *Page) error
+	CreateService(ctx context.Context, service string, userName string) error
 
 	GetService(ctx context.Context, userName string) (*Page, error)
+
+	IsUsersDataEmpty(ctx context.Context, userName string) (bool, error)
 }
 
 var (
