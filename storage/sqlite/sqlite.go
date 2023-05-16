@@ -28,67 +28,91 @@ func New(path string) (*Storage, error) {
 	return &Storage{db: db}, nil
 }
 
-func (s *Storage) Save(ctx context.Context, p *storage.Page) error {
+func (s *Storage) Save(ctx context.Context, service string, p *storage.Page) error {
 	//пишем sql запрос,который сохраняет запись в бд
-	q := `INSERT INTO pages(url,user_name) VALUES(?,?)`
-	//выполянем этот запрос с помощью сущности db
-	//использование конекста(общий таймаут на все вложенные и побочные вызовы) -хороший тон
-	//(конекст,запрос,аргументы к запросу)
-	//результат был бы интересен, если бы мы с этими данными дальше захотели бы что-то сделать
-	if _, err := s.db.ExecContext(ctx, q, p.URL, p.UserName); err != nil {
-		return fmt.Errorf("can't save page: %w", err)
+	q := `INSERT INTO pages(service,information,user_name) VALUES(?,?,?)`
+
+	if _, err := s.db.ExecContext(ctx, q, service, p.URL, p.UserName); err != nil {
+		return fmt.Errorf("can't save data: %w", err)
 	}
 
 	return nil
 }
 
-func (s *Storage) PickRandom(ctx context.Context, userName string) (*storage.Page, error) {
+func (s *Storage) PickPage(ctx context.Context, service, userName string) (*storage.Page, error) {
 	//с селект, тк получаем данные
 	//получаем ссылку от данного пользователя отсортированные в случайно порядке и возьмем первую из них
-	q := `SELECT url FROM pages WHERE user_name=? ORDER BY RANDOM() LIMIT 1`
+	q := `SELECT information FROM pages WHERE user_name=? AND service=?`
 	//переменная для ссылки
-	var url string
+	var information string
 	//выполянем запрос с помощью уже другой функции
 	//тк данная функция возвращает row ,то нужно преобразовать ее с помощью scan
-	err := s.db.QueryRowContext(ctx, q, userName).Scan(&url)
+	err := s.db.QueryRowContext(ctx, q, userName, service).Scan(&information)
 	//но может быть тип ошибки, когда в базе не нашлось данных по нашему запросу
 	//для нас его нужно обработать по-другому
 	if err == sql.ErrNoRows {
 		return nil, storage.ErrNoSavedPages
 	}
 	if err != nil {
-		return nil, fmt.Errorf("can't pick random page: %w", err)
+		return nil, fmt.Errorf("can't pick page: %w", err)
 
 	}
 
 	return &storage.Page{
-		URL:      url,
+		URL:      information,
 		UserName: userName,
 	}, nil
 }
 
-func (s *Storage) Remove(ctx context.Context, page *storage.Page) error {
-	q := `DELETE FROM pages WHERE url=? AND user_name=?`
-	if _, err := s.db.ExecContext(ctx, q, page.URL, page.UserName); err != nil {
+func (s *Storage) Remove(ctx context.Context, service string, page *storage.Page) error {
+	q := `SELECT information FROM pages WHERE user_name=? AND service=?`
+
+	var information string
+
+	err := s.db.QueryRowContext(ctx, q, page.UserName, service).Scan(&information)
+
+	if err == sql.ErrNoRows {
+		return storage.ErrNoSavedPages
+	}
+	if err != nil {
+		return fmt.Errorf("can't pick page and remove page: %w", err)
+
+	}
+
+	q = `DELETE FROM pages WHERE service=? AND user_name=?`
+
+	_, err = s.db.ExecContext(ctx, q, service, page.UserName)
+
+	if err != nil {
 		return fmt.Errorf("can't remove page: %w", err)
 	}
 
 	return nil
 }
 
+func (s *Storage) CreateService(ctx context.Context, page *storage.Page) error {
+	q := `UPDATE commands SET service=? WHERE user_name=?`
+
+	if _, err := s.db.ExecContext(ctx, q, page.URL, page.UserName); err != nil {
+		return fmt.Errorf("can't update service: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Storage) CreateCommand(ctx context.Context, command string, userName string) error {
-	q := `SELECT COUNT(*) FROM pages WHERE url=? AND user_name=?`
+	q := `SELECT COUNT(*) FROM commands WHERE user_name=?`
 
 	var count int
 
-	if err := s.db.QueryRowContext(ctx, q, command, userName).Scan(&count); err != nil {
+	if err := s.db.QueryRowContext(ctx, q, userName).Scan(&count); err != nil {
 		return fmt.Errorf("can't check if page exists: %w", err)
 	}
 
 	if count == 0 {
-		q = `INSERT INTO commands(command,user_name) VALUES(?,?)`
+		q = `INSERT INTO commands(service,command,user_name) VALUES(?,?,?)`
 
-		if _, err := s.db.ExecContext(ctx, q, command, userName); err != nil {
+		if _, err := s.db.ExecContext(ctx, q, "not", command, userName); err != nil {
 			return fmt.Errorf("can't create command: %w", err)
 		}
 	} else {
@@ -124,11 +148,28 @@ func (s *Storage) GetCommand(ctx context.Context, userName string) (*storage.Pag
 
 }
 
+func (s *Storage) GetService(ctx context.Context, userName string) (*storage.Page, error) {
+	g := `SELECT service FROM commands WHERE user_name=? `
+
+	var service string
+
+	err := s.db.QueryRowContext(ctx, g, userName).Scan(&service)
+	if err != nil {
+		return nil, fmt.Errorf("can't pick service from tabl commands: %w", err)
+
+	}
+
+	return &storage.Page{
+		URL:      service,
+		UserName: userName,
+	}, nil
+}
+
 // инициализируем нашу базу
 func (s *Storage) Init(ctx context.Context) error {
 	//создать таблицу, если она еще не существует
-	q := `CREATE TABLE IF NOT EXISTS pages (url TEXT,user_name TEXT)`
-	t := `CREATE TABLE IF NOT EXISTS commands (command TEXT,user_name TEXT)`
+	q := `CREATE TABLE IF NOT EXISTS pages (service TEXT,information TEXT,user_name TEXT)`
+	t := `CREATE TABLE IF NOT EXISTS commands (command TEXT,service TEXT,user_name TEXT)`
 
 	_, err := s.db.ExecContext(ctx, q)
 	if err != nil {

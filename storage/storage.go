@@ -17,15 +17,19 @@ type Storage interface {
 	//сохраняет старницу на вход
 	// передавать сарницу будем по ссылке потому что в теории тип(page) может расширяется
 	//и если мы будем передавать по значению,то все поля будут копировать , а это не выгодно
-	Save(ctx context.Context, p *Page) error
+	Save(ctx context.Context, service string, p *Page) error
 	//какому именно человеку нужно скинуть ссылку
-	PickRandom(ctx context.Context, userName string) (*Page, error)
+	PickPage(ctx context.Context, service, userName string) (*Page, error)
 	//удаление
-	Remove(ctx context.Context, p *Page) error
+	Remove(ctx context.Context, service string, p *Page) error
 
 	CreateCommand(ctx context.Context, command string, userName string) error
 
 	GetCommand(ctx context.Context, userName string) (*Page, error)
+
+	CreateService(ctx context.Context, page *Page) error
+
+	GetService(ctx context.Context, userName string) (*Page, error)
 }
 
 var (
