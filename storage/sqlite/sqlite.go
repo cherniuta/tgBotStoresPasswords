@@ -29,7 +29,6 @@ func New(path string) (*Storage, error) {
 }
 
 func (s *Storage) Save(ctx context.Context, service string, p *storage.Page) error {
-	//пишем sql запрос,который сохраняет запись в бд
 	q := `SELECT COUNT(*) FROM login_details WHERE user_name=? AND service=?`
 
 	var count int
@@ -56,16 +55,13 @@ func (s *Storage) Save(ctx context.Context, service string, p *storage.Page) err
 }
 
 func (s *Storage) PickPage(ctx context.Context, service, userName string) (*storage.Page, error) {
-	//с селект, тк получаем данные
-	//получаем ссылку от данного пользователя отсортированные в случайно порядке и возьмем первую из них
+
 	q := `SELECT information FROM login_details WHERE user_name=? AND service=?`
-	//переменная для ссылки
+
 	var information string
-	//выполянем запрос с помощью уже другой функции
-	//тк данная функция возвращает row ,то нужно преобразовать ее с помощью scan
+
 	err := s.db.QueryRowContext(ctx, q, userName, service).Scan(&information)
-	//но может быть тип ошибки, когда в базе не нашлось данных по нашему запросу
-	//для нас его нужно обработать по-другому
+
 	if err == sql.ErrNoRows {
 		return nil, storage.ErrNoSavedPages
 	}
