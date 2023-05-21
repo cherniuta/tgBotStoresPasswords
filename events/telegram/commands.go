@@ -74,15 +74,15 @@ func (p *Processor) doCmd(text string, chatID int, username string) error {
 		return p.SetCommand(chatID, username, text)
 	}
 
-	if command, _ := p.storage.GetCommand(context.Background(), username); command.URL != "not" {
-		if service, _ := p.storage.GetService(context.Background(), username); service.URL == "not" {
+	if command, _ := p.storage.GetCommand(context.Background(), username); command.Text != "not" {
+		if service, _ := p.storage.GetService(context.Background(), username); service.Text == "not" {
 
 			err := p.SetService(chatID, username, text)
 			if err != nil {
 				return err
 			}
 
-			switch command.URL {
+			switch command.Text {
 			case GetCmd:
 				return p.sendData(chatID, username)
 			case DelCmd:
@@ -95,7 +95,7 @@ func (p *Processor) doCmd(text string, chatID int, username string) error {
 			}
 		} else {
 
-			switch command.URL {
+			switch command.Text {
 			case SetCmd:
 				if isAffCmd(text) {
 					return p.saveData(chatID, text, username)
@@ -128,7 +128,7 @@ func (p *Processor) saveData(chatID int, pageURL string, username string) (err e
 	defer func() { err = e.WrapIfErr("can't do command: save page", err) }()
 
 	page := &storage.Page{
-		URL:      pageURL,
+		Text:     pageURL,
 		UserName: username,
 	}
 	service, err := p.storage.GetService(context.Background(), username)
@@ -136,7 +136,7 @@ func (p *Processor) saveData(chatID int, pageURL string, username string) (err e
 		return err
 	}
 
-	if err := p.storage.Save(context.Background(), service.URL, page); err != nil {
+	if err := p.storage.Save(context.Background(), service.Text, page); err != nil {
 		return err
 	}
 
@@ -161,7 +161,7 @@ func (p *Processor) sendData(chatID int, username string) (err error) {
 		return err
 	}
 
-	page, err := p.storage.PickPage(context.Background(), service.URL, username)
+	page, err := p.storage.PickPage(context.Background(), service.Text, username)
 
 	if err != nil && !errors.Is(err, storage.ErrNoSavedPages) {
 		return err
@@ -171,7 +171,7 @@ func (p *Processor) sendData(chatID int, username string) (err error) {
 		return p.tg.SendMessage(chatID, msgNoSavedService)
 	}
 
-	if err := p.tg.SendMessage(chatID, page.URL); err != nil {
+	if err := p.tg.SendMessage(chatID, page.Text); err != nil {
 		return err
 	}
 
@@ -192,7 +192,7 @@ func (p *Processor) deleteData(chatID int, username string) (err error) {
 		return err
 	}
 
-	page, err := p.storage.PickPage(context.Background(), service.URL, username)
+	page, err := p.storage.PickPage(context.Background(), service.Text, username)
 
 	if err != nil && !errors.Is(err, storage.ErrNoSavedPages) {
 		return err
@@ -203,7 +203,7 @@ func (p *Processor) deleteData(chatID int, username string) (err error) {
 		return p.tg.SendMessage(chatID, msgNoSavedService)
 	}
 
-	if err := p.storage.Remove(context.Background(), service.URL, page); err != nil {
+	if err := p.storage.Remove(context.Background(), service.Text, page); err != nil {
 		return err
 	}
 

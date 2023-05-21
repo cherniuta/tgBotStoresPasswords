@@ -41,13 +41,13 @@ func (s *Storage) Save(ctx context.Context, service string, p *storage.Page) err
 	if count == 0 {
 		q = `INSERT INTO login_details(service,information,user_name) VALUES(?,?,?)`
 
-		if _, err := s.db.ExecContext(ctx, q, service, p.URL, p.UserName); err != nil {
+		if _, err := s.db.ExecContext(ctx, q, service, p.Text, p.UserName); err != nil {
 			return fmt.Errorf("can't save data: %w", err)
 		}
 	} else {
 		q = `UPDATE login_details SET information=? WHERE user_name=? AND service=?`
 
-		if _, err := s.db.ExecContext(ctx, q, p.URL, p.UserName, service); err != nil {
+		if _, err := s.db.ExecContext(ctx, q, p.Text, p.UserName, service); err != nil {
 			return fmt.Errorf("can't update command: %w", err)
 		}
 	}
@@ -75,7 +75,7 @@ func (s *Storage) PickPage(ctx context.Context, service, userName string) (*stor
 	}
 
 	return &storage.Page{
-		URL:      information,
+		Text:     information,
 		UserName: userName,
 	}, nil
 }
@@ -169,7 +169,7 @@ func (s *Storage) GetCommand(ctx context.Context, userName string) (*storage.Pag
 	}
 
 	return &storage.Page{
-		URL:      com,
+		Text:     com,
 		UserName: userName,
 	}, nil
 
@@ -187,7 +187,7 @@ func (s *Storage) GetService(ctx context.Context, userName string) (*storage.Pag
 	}
 
 	return &storage.Page{
-		URL:      service,
+		Text:     service,
 		UserName: userName,
 	}, nil
 }
