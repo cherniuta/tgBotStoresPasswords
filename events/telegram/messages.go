@@ -16,12 +16,9 @@ In order to get or delete data, perform the following iterations
 const msgHello = "Hi there! 👽\n\n" + msgHelp
 
 const (
-	//неизвестная команда
 	msgUnknownCommand = "Unknown command 🤔"
-	//Нет ни одной сохраненной ссылки
 	msgNoSaved        = "You have no saved service 😔 \n\n"
 	msgSaved          = "Saved! 👌"
-	msgAlreadyExists  = "You have already have this page in your list 🙃"
 	msgDelete         = "Deleted! 🗑"
 	msgSetService     = "Enter service name 🖌️"
 	msgNoSavedService = "You have no saved data for this service 😔 \n\n" + msgSetService

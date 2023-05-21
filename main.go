@@ -10,7 +10,6 @@ import (
 	"tgBotStoresPasswords/storage/sqlite"
 )
 
-// но лучше сделать так жк с флагом,как и с токеном
 const (
 	tgBotHost         = "api.telegram.org"
 	sqliteStoragePath = "data/sqlite/storage.db"

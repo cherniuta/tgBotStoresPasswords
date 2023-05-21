@@ -20,8 +20,7 @@ const (
 // все команды, которые сможет отправлять бот
 // будем смотреть на текст сообщения и будем понимать что это за команда
 func (p *Processor) doCmd(text string, chatID int, username string) error {
-	//удалим из тектса сообщения лишние пробелы
-	//text = strings.TrimSpace(text)
+
 	//пропишем логи для отслеживания того,кто нашему боту что пишет
 	log.Printf("got new command '%s' from '%s'", text, username)
 
@@ -32,49 +31,50 @@ func (p *Processor) doCmd(text string, chatID int, username string) error {
 		return p.sendHelp(chatID)
 	}
 
-	if command, _ := p.storage.GetCommand(context.Background(), username); command.URL == "not" {
-		switch text {
-		case GetCmd:
-			ok, err := p.storage.IsUsersDataEmpty(context.Background(), username)
-			if err != nil {
-				return err
-			}
-
-			if ok == true {
-				return p.tg.SendMessage(chatID, msgNoSaved)
-			}
-
-			err = p.tg.SendMessage(chatID, msgSetService)
-			if err != nil {
-				return err
-			}
-
-			return p.SetCommand(chatID, username, text)
-		case SetCmd:
-			err := p.tg.SendMessage(chatID, msgSetService)
-			if err != nil {
-				return err
-			}
-			return p.SetCommand(chatID, username, text)
-		case DelCmd:
-			ok, err := p.storage.IsUsersDataEmpty(context.Background(), username)
-			if err != nil {
-				return err
-			}
-
-			if ok == true {
-				return p.tg.SendMessage(chatID, msgNoSaved)
-			}
-			err = p.tg.SendMessage(chatID, msgSetService)
-			if err != nil {
-				return err
-			}
-			return p.SetCommand(chatID, username, text)
-		default:
-			return p.tg.SendMessage(chatID, msgUnknownCommand)
+	switch text {
+	case GetCmd:
+		ok, err := p.storage.IsUsersDataEmpty(context.Background(), username)
+		if err != nil {
+			return err
 		}
 
-	} else {
+		if ok == true {
+			p.SetCommand(chatID, username, "not")
+			p.SetService(chatID, username, "not")
+			return p.tg.SendMessage(chatID, msgNoSaved)
+		}
+
+		err = p.tg.SendMessage(chatID, msgSetService)
+		if err != nil {
+			return err
+		}
+
+		return p.SetCommand(chatID, username, text)
+	case SetCmd:
+		err := p.tg.SendMessage(chatID, msgSetService)
+		if err != nil {
+			return err
+		}
+		return p.SetCommand(chatID, username, text)
+	case DelCmd:
+		ok, err := p.storage.IsUsersDataEmpty(context.Background(), username)
+		if err != nil {
+			return err
+		}
+
+		if ok == true {
+			p.SetCommand(chatID, username, "not")
+			p.SetService(chatID, username, "not")
+			return p.tg.SendMessage(chatID, msgNoSaved)
+		}
+		err = p.tg.SendMessage(chatID, msgSetService)
+		if err != nil {
+			return err
+		}
+		return p.SetCommand(chatID, username, text)
+	}
+
+	if command, _ := p.storage.GetCommand(context.Background(), username); command.URL != "not" {
 		if service, _ := p.storage.GetService(context.Background(), username); service.URL == "not" {
 
 			err := p.SetService(chatID, username, text)
@@ -120,13 +120,13 @@ func (p *Processor) doCmd(text string, chatID int, username string) error {
 		}
 
 	}
+	return p.tg.SendMessage(chatID, msgUnknownCommand)
 
 }
 
 func (p *Processor) saveData(chatID int, pageURL string, username string) (err error) {
 	defer func() { err = e.WrapIfErr("can't do command: save page", err) }()
 
-	//подготовим станицу, которую хотим сохранить
 	page := &storage.Page{
 		URL:      pageURL,
 		UserName: username,
@@ -136,7 +136,6 @@ func (p *Processor) saveData(chatID int, pageURL string, username string) (err e
 		return err
 	}
 
-	//пытаемся сохранить страницу
 	if err := p.storage.Save(context.Background(), service.URL, page); err != nil {
 		return err
 	}
@@ -147,7 +146,6 @@ func (p *Processor) saveData(chatID int, pageURL string, username string) (err e
 		return err
 	}
 
-	//если страница корректнго сохранилась, то сообщаем об этом пользователю
 	if err := p.tg.SendMessage(chatID, msgSaved); err != nil {
 		return err
 	}
@@ -163,19 +161,16 @@ func (p *Processor) sendData(chatID int, username string) (err error) {
 		return err
 	}
 
-	//ищем случайную статью
 	page, err := p.storage.PickPage(context.Background(), service.URL, username)
 
 	if err != nil && !errors.Is(err, storage.ErrNoSavedPages) {
 		return err
 	}
 
-	//особый тип ошибок, когда нет сохраненых страниц
 	if errors.Is(err, storage.ErrNoSavedPages) {
 		return p.tg.SendMessage(chatID, msgNoSavedService)
 	}
 
-	//если же мф что-то нашли, отправляем эту ссылку пользователю
 	if err := p.tg.SendMessage(chatID, page.URL); err != nil {
 		return err
 	}
@@ -197,14 +192,12 @@ func (p *Processor) deleteData(chatID int, username string) (err error) {
 		return err
 	}
 
-	//ищем случайную статью
 	page, err := p.storage.PickPage(context.Background(), service.URL, username)
 
 	if err != nil && !errors.Is(err, storage.ErrNoSavedPages) {
 		return err
 	}
 
-	//особый тип ошибок, когда нет сохраненых страниц
 	if errors.Is(err, storage.ErrNoSavedPages) {
 
 		return p.tg.SendMessage(chatID, msgNoSavedService)
@@ -224,7 +217,6 @@ func (p *Processor) deleteData(chatID int, username string) (err error) {
 		return err
 	}
 
-	//если мф нашли и отправили ссылку, то нужно обязательно ее удалить
 	return nil
 
 }

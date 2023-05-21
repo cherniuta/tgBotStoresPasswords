@@ -30,7 +30,7 @@ func New(path string) (*Storage, error) {
 
 func (s *Storage) Save(ctx context.Context, service string, p *storage.Page) error {
 	//пишем sql запрос,который сохраняет запись в бд
-	q := `SELECT COUNT(*) FROM pages WHERE user_name=? AND service=?`
+	q := `SELECT COUNT(*) FROM login_details WHERE user_name=? AND service=?`
 
 	var count int
 
@@ -39,13 +39,13 @@ func (s *Storage) Save(ctx context.Context, service string, p *storage.Page) err
 	}
 
 	if count == 0 {
-		q = `INSERT INTO pages(service,information,user_name) VALUES(?,?,?)`
+		q = `INSERT INTO login_details(service,information,user_name) VALUES(?,?,?)`
 
 		if _, err := s.db.ExecContext(ctx, q, service, p.URL, p.UserName); err != nil {
 			return fmt.Errorf("can't save data: %w", err)
 		}
 	} else {
-		q = `UPDATE pages SET information=? WHERE user_name=? AND service=?`
+		q = `UPDATE login_details SET information=? WHERE user_name=? AND service=?`
 
 		if _, err := s.db.ExecContext(ctx, q, p.URL, p.UserName, service); err != nil {
 			return fmt.Errorf("can't update command: %w", err)
@@ -58,7 +58,7 @@ func (s *Storage) Save(ctx context.Context, service string, p *storage.Page) err
 func (s *Storage) PickPage(ctx context.Context, service, userName string) (*storage.Page, error) {
 	//с селект, тк получаем данные
 	//получаем ссылку от данного пользователя отсортированные в случайно порядке и возьмем первую из них
-	q := `SELECT information FROM pages WHERE user_name=? AND service=?`
+	q := `SELECT information FROM login_details WHERE user_name=? AND service=?`
 	//переменная для ссылки
 	var information string
 	//выполянем запрос с помощью уже другой функции
@@ -81,7 +81,7 @@ func (s *Storage) PickPage(ctx context.Context, service, userName string) (*stor
 }
 
 func (s *Storage) Remove(ctx context.Context, service string, page *storage.Page) error {
-	q := `SELECT information FROM pages WHERE user_name=? AND service=?`
+	q := `SELECT information FROM login_details WHERE user_name=? AND service=?`
 
 	var information string
 
@@ -95,7 +95,7 @@ func (s *Storage) Remove(ctx context.Context, service string, page *storage.Page
 
 	}
 
-	q = `DELETE FROM pages WHERE service=? AND user_name=?`
+	q = `DELETE FROM login_details WHERE service=? AND user_name=?`
 
 	_, err = s.db.ExecContext(ctx, q, service, page.UserName)
 
@@ -142,7 +142,7 @@ func (s *Storage) CreateCommand(ctx context.Context, command string, userName st
 	return nil
 }
 func (s *Storage) IsUsersDataEmpty(ctx context.Context, userName string) (bool, error) {
-	q := `SELECT COUNT(*) FROM pages WHERE user_name=?`
+	q := `SELECT COUNT(*) FROM login_details WHERE user_name=?`
 
 	var count int
 
@@ -195,7 +195,7 @@ func (s *Storage) GetService(ctx context.Context, userName string) (*storage.Pag
 // инициализируем нашу базу
 func (s *Storage) Init(ctx context.Context) error {
 	//создать таблицу, если она еще не существует
-	q := `CREATE TABLE IF NOT EXISTS pages (service TEXT,information TEXT,user_name TEXT)`
+	q := `CREATE TABLE IF NOT EXISTS login_details (service TEXT,information TEXT,user_name TEXT)`
 	t := `CREATE TABLE IF NOT EXISTS commands (command TEXT,service TEXT,user_name TEXT)`
 
 	_, err := s.db.ExecContext(ctx, q)
